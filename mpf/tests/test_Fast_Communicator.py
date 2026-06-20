@@ -148,14 +148,16 @@ class TestFastCommunicatorRetry(unittest.TestCase):
 
 class TestFastCommunicatorInbound(unittest.TestCase):
 
-    def test_parse_raises_on_undecodable_data(self):
-        """Un-decodable data raises during init (ignore_decode_errors False), so
-        a board in a bad state surfaces loudly instead of being guessed at."""
+    def test_parse_drops_undecodable_data_and_keeps_reading(self):
+        """A corrupted segment is dropped rather than raised, so a single noisy
+        read can't kill the read loop (which would crash MPF). A following valid
+        message in the same buffer is still dispatched."""
         comm = _make_comm()
         comm.ignore_decode_errors = False
-        comm.message_processors = {'ID:': lambda m: None}
-        with self.assertRaises(UnicodeDecodeError):
-            comm.parse_incoming_raw_bytes(b'\x81\xb5\xc1\r')
+        received = []
+        comm.message_processors = {'ID:': received.append}
+        comm.parse_incoming_raw_bytes(b'\x825\xffER:P\rID:exp fp-exp-0081 0.48\r')
+        self.assertEqual(received, ['exp fp-exp-0081 0.48'])
 
     def test_parse_drops_undecodable_data_when_ignoring(self):
         """With ignore_decode_errors set (e.g. during connect), undecodable
